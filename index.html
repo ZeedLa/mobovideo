@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPLITDECK — разделение видео на дорожки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js"></script>
+<style>
+  :root{
+    --bg:#0e131b; --bg2:#131a25; --panel:#161e2b; --panel2:#1b2534;
+    --line:#28354a; --line2:#33445f;
+    --ink:#e9eff8; --mut:#8ea1ba; --dim:#5c6c85;
+    --v:#4cc9ff; --v-deep:#0f5f8a;
+    --a:#ffb454; --a-deep:#8a5a17;
+    --ok:#5ee39a; --err:#ff6b6b; --ph:#ff4d6d;
+    --disp:'Unbounded',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{color-scheme:dark}
+  body{
+    font-family:var(--body); color:var(--ink); background:var(--bg);
+    min-height:100vh; overflow-x:hidden;
+  }
+  /* ---------- ambient background ---------- */
+  .bg{position:fixed;inset:0;z-index:-2;background:
+    radial-gradient(900px 520px at 12% -6%, rgba(76,201,255,.10), transparent 60%),
+    radial-gradient(820px 560px at 96% 108%, rgba(255,180,84,.09), transparent 60%),
+    var(--bg);}
+  .scan{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.35;
+    background:repeating-linear-gradient(0deg, rgba(255,255,255,.016) 0 1px, transparent 1px 3px);}
+  ::selection{background:rgba(76,201,255,.35)}
+
+  .wrap{max-width:1440px;margin:0 auto;padding:18px 26px 40px}
+
+  /* ---------- topbar ---------- */
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:6px 0 18px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:14px}
+  .brand svg{flex:none}
+  .brand h1{font-family:var(--disp);font-weight:900;font-size:24px;letter-spacing:.02em;line-height:1}
+  .brand h1 b{color:var(--v);font-weight:900}
+  .brand p{font-size:12px;color:var(--mut);margin-top:5px;letter-spacing:.04em}
+  .top-right{display:flex;align-items:center;gap:10px}
+  .chip{font-family:var(--mono);font-size:11px;padding:5px 10px;border:1px solid var(--line2);border-radius:6px;color:var(--mut);background:var(--panel)}
+  .chip.ok{color:var(--ok);border-color:rgba(94,227,154,.4)}
+  .chip.bad{color:var(--err);border-color:rgba(255,107,107,.45)}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    font-family:var(--body);font-weight:600;font-size:13.5px;color:var(--ink);
+    background:#22304a;border:1px solid var(--line2);border-radius:8px;
+    padding:9px 16px;cursor:pointer;transition:transform .15s ease, box-shadow .2s ease, border-color .2s, background .2s;
+    user-select:none;
+  }
+  .btn:hover{transform:translateY(-1px);border-color:#4a6390}
+  .btn:active{transform:translateY(0)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+  .btn:focus-visible{outline:2px solid var(--v);outline-offset:2px}
+  .btn.ghost{background:transparent}
+  .btn.ghost:hover{background:rgba(76,201,255,.08)}
+  .btn.big{padding:12px 18px;font-size:14px;width:100%}
+  .btn.v{background:linear-gradient(180deg,#1c5f86,#154a6a);border-color:#2f89b8}
+  .btn.v:hover{box-shadow:0 6px 22px -6px rgba(76,201,255,.45);border-color:var(--v)}
+  .btn.a{background:linear-gradient(180deg,#8a5f1e,#6e4a15);border-color:#c98a34}
+  .btn.a:hover{box-shadow:0 6px 22px -6px rgba(255,180,84,.45);border-color:var(--a)}
+  .btn.mini{padding:4px 10px;font-size:12px;border-radius:6px}
+  .linklike{background:none;border:none;color:var(--v);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+  .linklike:hover{color:#8fdcff}
+
+  /* ---------- panels ---------- */
+  .panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
+  .panel-head h3{font-family:var(--disp);font-weight:700;font-size:11px;letter-spacing:.22em;color:#c8d6ea}
+  .panel-head .idx{font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .panel-head .spacer{flex:1}
+  .led{width:8px;height:8px;border-radius:50%;background:var(--dim);flex:none}
+  .led.v{background:var(--v);box-shadow:0 0 8px rgba(76,201,255,.8)}
+  .led.a{background:var(--a);box-shadow:0 0 8px rgba(255,180,84,.8)}
+  .led.busy{animation:pulse 0.9s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  .tc{font-family:var(--mono);font-size:12px;color:var(--mut)}
+  .tc b{color:var(--ink);font-weight:600}
+
+  /* ---------- drop stage ---------- */
+  #dropSection{padding-top:34px}
+  .dropzone{
+    position:relative;min-height:330px;border-radius:14px;cursor:pointer;
+    background:linear-gradient(160deg,rgba(76,201,255,.05),rgba(255,180,84,.04) 70%),var(--panel);
+    display:grid;grid-template-columns:minmax(0,1.2fr) auto;align-items:center;gap:24px;
+    padding:48px 56px;transition:transform .25s ease, box-shadow .25s ease, background .25s;
+  }
+  .dropzone:hover{transform:translateY(-3px);box-shadow:0 18px 50px -20px rgba(0,0,0,.7)}
+  .dropzone.over{background:linear-gradient(160deg,rgba(76,201,255,.12),rgba(255,180,84,.06) 70%),var(--panel2)}
+  .dz-border{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .dz-border rect{
+    x:2px;y:2px;width:calc(100% - 4px);height:calc(100% - 4px);rx:13px;
+    fill:none;stroke:#3b4c66;stroke-width:2;stroke-dasharray:10 9;
+    animation:dash 22s linear infinite;transition:stroke .25s;
+  }
+  .dropzone.over .dz-border rect{stroke:var(--v);animation-duration:5s}
+  @keyframes dash{to{stroke-dashoffset:-380}}
+  .dz-copy h2{font-family:var(--disp);font-weight:900;font-size:clamp(26px,3.4vw,40px);line-height:1.12;letter-spacing:.01em}
+  .dz-copy h2 em{font-style:normal;color:var(--v)}
+  .dz-copy .pick{margin:16px 0 10px;font-size:16px;color:var(--mut)}
+  .dz-hint{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.03em}
+  .dz-hint span{color:var(--mut)}
+  .dz-art{opacity:.95}
+  .steps{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:22px 6px 0;font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.08em}
+  .steps .st{display:flex;align-items:center;gap:8px;padding:7px 12px;border:1px solid var(--line);border-radius:7px;background:var(--panel);transition:all .3s}
+  .steps .st i{font-style:normal;color:var(--dim)}
+  .steps .st.on{color:var(--ink);border-color:var(--line2)}
+  .steps .st.on i{color:var(--v)}
+  .steps .st.done{color:var(--ok);border-color:rgba(94,227,154,.35)}
+  .steps .arr{color:var(--line2)}
+
+  /* ---------- editor ---------- */
+  .editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:18px;padding-top:20px}
+  .left-col{display:flex;flex-direction:column;gap:18px;min-width:0}
+  .right-col{display:flex;flex-direction:column;gap:16px}
+  .editor .panel{opacity:0;transform:translateY(12px)}
+  .editor.show .panel{animation:rise .55s cubic-bezier(.2,.75,.25,1) forwards}
+  .editor.show .panel:nth-of-type(2),.editor.show .right-col .panel:nth-of-type(2){animation-delay:.09s}
+  .editor.show .right-col .panel:nth-of-type(3){animation-delay:.18s}
+  @keyframes rise{to{opacity:1;transform:none}}
+
+  /* monitor */
+  .monitor{background:#05070c;display:flex;justify-content:center}
+  .monitor video{width:100%;max-height:54vh;display:block;background:#000}
+  .monitor-wrap{position:relative;width:100%}
+  .rec{position:absolute;top:12px;right:14px;font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:#ffd7dd;background:rgba(120,10,25,.75);border:1px solid rgba(255,90,110,.6);border-radius:6px;padding:5px 10px}
+  .rec i{font-style:normal;animation:pulse 0.8s infinite;color:#ff5d73}
+  .transport{display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .playbtn{width:46px;height:46px;border-radius:50%;flex:none;border:1px solid #2f89b8;cursor:pointer;
+    background:linear-gradient(180deg,#1c5f86,#123f5c);display:flex;align-items:center;justify-content:center;
+    transition:transform .15s, box-shadow .2s}
+  .playbtn:hover{transform:scale(1.06);box-shadow:0 0 22px -4px rgba(76,201,255,.55)}
+  .playbtn svg{fill:#dff4ff}
+  .transport .tc.big{font-size:14px}
+  .io-btns{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+
+  /* timeline */
+  .trim-row{display:flex;align-items:center;gap:10px;padding:12px 14px 0;flex-wrap:wrap}
+  .trim-row label{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--mut)}
+  .trim-row input{font-family:var(--mono);font-size:13px;width:128px;background:#0b111a;border:1px solid var(--line2);color:var(--ink);border-radius:6px;padding:7px 9px;transition:border-color .2s, box-shadow .2s}
+  .trim-row input:focus{outline:none;border-color:var(--v);box-shadow:0 0 0 3px rgba(76,201,255,.15)}
+  .trim-row input.bad{border-color:var(--err);animation:shake .3s}
+  @keyframes shake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+  .len-chip{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--a);background:rgba(255,180,84,.08);border:1px solid rgba(255,180,84,.3);border-radius:6px;padding:6px 10px}
+
+  #timeline{padding:12px 14px 10px;user-select:none}
+  #ruler{width:100%;height:24px;display:block;cursor:pointer}
+  .lanes{position:relative;margin-top:4px;height:126px;background:#0d1420;border:1px solid var(--line);border-radius:8px;cursor:default;touch-action:none}
+  .lane{position:relative;left:10px;right:10px;width:calc(100% - 20px);height:50px;background:#101826;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .lane.lv{top:9px}
+  .lane.la{top:15px}
+  .lane-tag{position:absolute;z-index:3;top:4px;left:6px;font-family:var(--mono);font-size:9px;letter-spacing:.2em;padding:2px 6px;border-radius:4px;background:rgba(10,15,24,.8)}
+  .lane-tag.v{color:var(--v);border:1px solid rgba(76,201,255,.35)}
+  .lane-tag.a{color:var(--a);border:1px solid rgba(255,180,84,.35)}
+  .filmstrip{position:absolute;inset:0}
+  .filmstrip canvas{position:absolute;top:50%;transform:translate(-50%,-50%);height:44px;border-radius:3px;opacity:.85;animation:thumbIn .4s both}
+  @keyframes thumbIn{from{opacity:0;filter:brightness(3)}}
+  #wave{position:absolute;inset:0;width:100%;height:100%}
+  .wave-note{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.1em}
+  .shade{position:absolute;top:0;bottom:0;background:rgba(4,7,12,.68);pointer-events:none;z-index:4;
+    background-image:repeating-linear-gradient(-45deg, rgba(255,255,255,.03) 0 6px, transparent 6px 12px)}
+  .handle{position:absolute;top:-4px;bottom:-4px;width:13px;margin-left:-6px;z-index:6;cursor:ew-resize;border-radius:4px;transition:transform .12s}
+  .handle::after{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:3px;border-radius:2px}
+  .handle:hover{transform:scaleY(1.05)}
+  .h-in{background:rgba(76,201,255,.18);border:1px solid var(--v)}
+  .h-in::after{background:var(--v)}
+  .h-out{background:rgba(76,201,255,.18);border:1px solid var(--v)}
+  .h-out::after{background:var(--v)}
+  .playhead{position:absolute;top:-6px;bottom:0;width:2px;margin-left:-1px;background:var(--ph);z-index:7;pointer-events:none;box-shadow:0 0 8px rgba(255,77,109,.8)}
+  .playhead::before{content:"";position:absolute;top:0;left:-4px;border:5px solid transparent;border-top-color:var(--ph)}
+  .ph-flag{position:absolute;top:-8px;left:8px;transform:translateY(-100%);font-family:var(--mono);font-size:10px;background:#2a1219;border:1px solid rgba(255,77,109,.55);color:#ffc2cd;border-radius:4px;padding:2px 6px;white-space:nowrap}
+  .tl-hint{font-family:var(--mono);font-size:10.5px;color:var(--dim);padding:0 14px 12px;letter-spacing:.04em}
+  .tl-hint kbd{border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-size:10px;background:#1a2434;color:var(--mut)}
+
+  /* file & export panels */
+  .file-rows{padding:12px 14px;display:grid;gap:8px}
+  .file-rows .row{display:flex;justify-content:space-between;gap:12px;font-size:12.5px}
+  .file-rows .row b{font-weight:500;color:var(--mut);flex:none}
+  .file-rows .row span{font-family:var(--mono);font-size:11.5px;color:var(--ink);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .x-body{padding:14px}
+  .x-title{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .x-ico{width:42px;height:42px;flex:none;border-radius:8px;display:flex;align-items:center;justify-content:center}
+  .x-ico.v{background:rgba(76,201,255,.12);border:1px solid rgba(76,201,255,.35)}
+  .x-ico.a{background:rgba(255,180,84,.12);border:1px solid rgba(255,180,84,.35)}
+  .x-title h4{font-family:var(--disp);font-size:13px;font-weight:700;letter-spacing:.06em}
+  .x-title small{display:block;font-family:var(--mono);font-size:10.5px;color:var(--mut);margin-top:3px;letter-spacing:.06em}
+  .bar{height:8px;border-radius:5px;background:#0b111a;border:1px solid var(--line);overflow:hidden;margin:12px 0 8px}
+  .bar-fill{height:100%;width:0%;border-radius:4px;transition:width .2s ease}
+  .card-video .bar-fill{background:linear-gradient(90deg,#1d7fb2,var(--v))}
+  .card-audio .bar-fill{background:linear-gradient(90deg,#c07f2a,var(--a))}
+  .bar-fill.busy{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.22) 0 9px,transparent 9px 18px);animation:stripes .7s linear infinite}
+  @keyframes stripes{to{background-position:26px 0}}
+  .x-status{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--mut);min-height:20px;margin-bottom:12px}
+  .x-status .pct{font-family:var(--mono);color:var(--ink)}
+  .result{display:flex;align-items:center;gap:10px;margin-top:12px;padding:9px 11px;border-radius:7px;background:rgba(94,227,154,.07);border:1px solid rgba(94,227,154,.35);font-family:var(--mono);font-size:11px;color:var(--ok);animation:rise .4s both}
+  .result span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .result button{background:none;border:1px solid rgba(94,227,154,.4);color:var(--ok);border-radius:5px;font:inherit;font-size:10.5px;padding:3px 8px;cursor:pointer;flex:none}
+  .result button:hover{background:rgba(94,227,154,.15)}
+
+  footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 26px;font-size:11.5px;color:var(--dim)}
+  footer kbd{border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:var(--mono);font-size:10px;background:#1a2434;color:var(--mut)}
+
+  #toasts{position:fixed;left:20px;bottom:20px;z-index:50;display:flex;flex-direction:column;gap:8px}
+  .toast{font-size:13px;padding:11px 16px;border-radius:8px;background:#1c2534;border:1px solid var(--line2);box-shadow:0 10px 30px -10px rgba(0,0,0,.6);animation:tin .3s cubic-bezier(.2,.9,.3,1.2)}
+  .toast.ok{border-color:rgba(94,227,154,.5);color:#c9f5dd}
+  .toast.err{border-color:rgba(255,107,107,.55);color:#ffd4d4}
+  @keyframes tin{from{opacity:0;transform:translateX(-16px)}}
+
+  @media (max-width:1120px){
+    .editor-grid{grid-template-columns:1fr}
+    .dropzone{grid-template-columns:1fr;padding:38px 30px}
+    .dz-art{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="bg"></div><div class="scan"></div>
+
+<div class="wrap">
+<header>
+  <div class="brand">
+    <svg width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true">
+      <rect x="3" y="6" width="16" height="32" rx="3" stroke="#4cc9ff" stroke-width="2.4"/>
+      <rect x="6.5" y="11" width="3" height="3" fill="#4cc9ff"/><rect x="12.5" y="11" width="3" height="3" fill="#4cc9ff"/>
+      <rect x="6.5" y="20" width="3" height="3" fill="#4cc9ff"/><rect x="12.5" y="20" width="3" height="3" fill="#4cc9ff"/>
+      <rect x="6.5" y="29" width="3" height="3" fill="#4cc9ff"/><rect x="12.5" y="29" width="3" height="3" fill="#4cc9ff"/>
+      <path d="M19 15 C 27 15, 28 12, 41 12" stroke="#4cc9ff" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M19 29 C 27 29, 28 32, 41 32" stroke="#ffb454" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M24 30 l2 -3 2 5 2 -7 2 5" stroke="#ffb454" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <h1>SPLIT<b>DECK</b></h1>
+      <p>разделение и обрезка дорожек видео · полностью локально</p>
+    </div>
+  </div>
+  <div class="top-right">
+    <span class="chip" id="codecChip">проверка WebCodecs…</span>
+    <button class="btn ghost" id="replaceBtn" hidden>⟲ Заменить файл</button>
+  </div>
+</header>
+
+<!-- ======== ЭТАП 1: ЗАГРУЗКА ======== -->
+<section id="dropSection">
+  <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Загрузить видеофайл">
+    <svg class="dz-border" aria-hidden="true"><rect/></svg>
+    <div class="dz-copy">
+      <h2>Перетащите видеофайл —<br>и <em>разрежьте его на дорожки</em></h2>
+      <p class="pick">или <button class="linklike" id="pickBtn" type="button">выберите файл</button> на устройстве</p>
+      <p class="dz-hint"><span>MP4 · WebM · MOV · MKV</span> — всё, что умеет открывать ваш браузер.<br>Файл никуда не отправляется: обработка идёт прямо во вкладке.</p>
+    </div>
+    <svg class="dz-art" width="260" height="180" viewBox="0 0 260 180" fill="none" aria-hidden="true">
+      <rect x="10" y="30" width="72" height="120" rx="8" stroke="#3b4c66" stroke-width="2.5"/>
+      <g fill="#4cc9ff" opacity=".8">
+        <rect x="20" y="44" width="8" height="8" rx="2"/><rect x="64" y="44" width="8" height="8" rx="2"/>
+        <rect x="20" y="86" width="8" height="8" rx="2"/><rect x="64" y="86" width="8" height="8" rx="2"/>
+        <rect x="20" y="128" width="8" height="8" rx="2"/><rect x="64" y="128" width="8" height="8" rx="2"/>
+      </g>
+      <path d="M82 60 C 140 60, 150 44, 250 44" stroke="#4cc9ff" stroke-width="3" stroke-linecap="round"/>
+      <path d="M82 120 C 140 120, 150 136, 250 136" stroke="#ffb454" stroke-width="3" stroke-linecap="round"/>
+      <path d="M150 136 l8 -14 8 24 8 -32 8 22 8 -10 8 10" stroke="#ffb454" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+      <rect x="160" y="32" width="6" height="24" rx="2" fill="#4cc9ff" opacity=".55"/>
+      <rect x="196" y="32" width="6" height="24" rx="2" fill="#4cc9ff" opacity=".85"/>
+      <circle cx="130" cy="90" r="17" stroke="#ff4d6d" stroke-width="2.5"/>
+      <path d="M122 98 L138 82 M122 82 L138 98" stroke="#ff4d6d" stroke-width="2.5" stroke-linecap="round" opacity="0"/>
+      <path d="M124 90 h12" stroke="#ff4d6d" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="steps" id="steps">
+    <div class="st" data-s="1"><i>01</i> ЗАГРУЗКА ФАЙЛА</div><span class="arr">→</span>
+    <div class="st" data-s="2"><i>02</i> ДИАПАЗОН ОБРЕЗКИ</div><span class="arr">→</span>
+    <div class="st" data-s="3"><i>03</i> ЭКСПОРТ ВИДЕО + АУДИО</div>
+  </div>
+</section>
+
+<!-- ======== ЭТАП 2: РЕДАКТОР ======== -->
+<section class="editor" id="editor" hidden>
+  <div class="editor-grid">
+    <div class="left-col">
+      <!-- монитор -->
+      <section class="panel">
+        <div class="panel-head">
+          <span class="led v"></span><h3>МОНИТОР</h3><span class="idx">01</span>
+          <span class="spacer"></span>
+          <span class="tc">TC <b id="tcNow">00:00:00.000</b> / <span id="tcDur">--:--:--.---</span></span>
+        </div>
+        <div class="monitor">
+          <div class="monitor-wrap">
+            <video id="preview" playsinline></video>
+            <div class="rec" id="recBadge" hidden><i>●</i> REC · ЗАХВАТ КАДРОВ</div>
+          </div>
+        </div>
+        <div class="transport">
+          <button class="playbtn" id="playBtn" title="Пробел">
+            <svg id="icoPlay" width="18" height="18" viewBox="0 0 16 16"><path d="M3 1.5 L14 8 L3 14.5 Z"/></svg>
+            <svg id="icoPause" width="18" height="18" viewBox="0 0 16 16" hidden><rect x="2.5" y="1.5" width="4" height="13" rx="1"/><rect x="9.5" y="1.5" width="4" height="13" rx="1"/></svg>
+          </button>
+          <div class="io-btns">
+            <button class="btn mini ghost" id="setInBtn" title="Клавиша I">⤵ IN — точка входа</button>
+            <button class="btn mini ghost" id="setOutBtn" title="Клавиша O">⤴ OUT — точка выхода</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- монтажная область -->
+      <section class="panel">
+        <div class="panel-head">
+          <span class="led" style="background:var(--ph);box-shadow:0 0 8px rgba(255,77,109,.8)"></span>
+          <h3>МОНТАЖНАЯ ОБЛАСТЬ</h3><span class="idx">02</span>
+          <span class="spacer"></span>
+          <span class="tc">выбрано: <b id="selLen">—</b></span>
+        </div>
+        <div class="trim-row">
+          <label for="inTC">ВХОД</label><input id="inTC" class="mono" spellcheck="false" placeholder="00:00:00.000">
+          <label for="outTC">ВЫХОД</label><input id="outTC" class="mono" spellcheck="false" placeholder="00:00:00.000">
+          <button class="btn mini ghost" id="resetRange">⟲ весь файл</button>
+          <span class="len-chip" id="lenChip">Δ 00:00:00.000</span>
+        </div>
+        <div id="timeline">
+          <canvas id="ruler"></canvas>
+          <div class="lanes" id="lanes">
+            <div class="lane lv"><span class="lane-tag v">ВИДЕО</span><div class="filmstrip" id="filmstrip"></div></div>
+            <div class="lane la"><span class="lane-tag a">АУДИО</span><canvas id="wave"></canvas><div class="wave-note" id="waveNote">декодирование звука…</div></div>
+            <div class="shade" id="shadeL"></div><div class="shade" id="shadeR"></div>
+            <div class="handle h-in" id="hIn" title="Точка входа"></div>
+            <div class="handle h-out" id="hOut" title="Точка выхода"></div>
+            <div class="playhead" id="playhead"><div class="ph-flag" id="phFlag">00:00:00.000</div></div>
+          </div>
+        </div>
+        <div class="tl-hint"><kbd>I</kbd>/<kbd>O</kbd> — точки входа/выхода · <kbd>←</kbd><kbd>→</kbd> — покадрово (<kbd>Shift</kbd> — ±1 c) · <kbd>Пробел</kbd> — воспроизведение · перетаскивайте ручки и плейхед мышью</div>
+      </section>
+    </div>
+
+    <aside class="right-col">
+      <!-- файл -->
+      <section class="panel">
+        <div class="panel-head"><span class="led" style="background:#c8d6ea"></span><h3>ИСХОДНИК</h3><span class="idx">SRC</span></div>
+        <div class="file-rows">
+          <div class="row"><b>файл</b><span id="mName">—</span></div>
+          <div class="row"><b>размер</b><span id="mSize">—</span></div>
+          <div class="row"><b>длительность</b><span id="mDur">—</span></div>
+          <div class="row"><b>разрешение</b><span id="mRes">—</span></div>
+          <div class="row"><b>звук</b><span id="mAud">анализ…</span></div>
+        </div>
+      </section>
+
+      <!-- экспорт видео -->
+      <section class="panel export-card card-video">
+        <div class="panel-head"><span class="led v" id="ledV"></span><h3>ДОРОЖКА ВИДЕО</h3><span class="idx">A</span><span class="spacer"></span><span class="tc">MP4 · H.264 · без звука</span></div>
+        <div class="x-body">
+          <div class="x-title">
+            <div class="x-ico v"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4cc9ff" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 9h20M2 15h20M7 5v14M17 5v14"/></svg></div>
+            <div><h4>Видеоряд без звука</h4><small>перекодирование выбранного фрагмента</small></div>
+          </div>
+          <div class="bar"><div class="bar-fill" id="barV"></div></div>
+          <div class="x-status"><span id="statV">готов к экспорту</span><span class="pct" id="pctV"></span></div>
+          <button class="btn big v" id="exportVideoBtn">⬇ Экспорт видео (.mp4)</button>
+          <div class="result" id="resV" hidden><span></span><button>скачать ещё раз</button></div>
+        </div>
+      </section>
+
+      <!-- экспорт аудио -->
+      <section class="panel export-card card-audio">
+        <div class="panel-head"><span class="led a" id="ledA"></span><h3>ДОРОЖКА АУДИО</h3><span class="idx">B</span><span class="spacer"></span><span class="tc">M4A · AAC · 192 kbps</span></div>
+        <div class="x-body">
+          <div class="x-title">
+            <div class="x-ico a"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.8" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 4v16M15 7v10M19 10v4M21.5 12h.01"/></svg></div>
+            <div><h4>Звук без картинки</h4><small>обрезанный фрагмент в AAC</small></div>
+          </div>
+          <div class="bar"><div class="bar-fill" id="barA"></div></div>
+          <div class="x-status"><span id="statA">анализ звука…</span><span class="pct" id="pctA"></span></div>
+          <button class="btn big a" id="exportAudioBtn">⬇ Экспорт аудио (.m4a)</button>
+          <div class="result" id="resA" hidden><span></span><button>скачать ещё раз</button></div>
+        </div>
+      </section>
+
+      <button class="btn big ghost" id="exportAllBtn">⇊ Экспорт обеих дорожек по очереди</button>
+    </aside>
+  </div>
+</section>
+
+<footer>
+  <span>🔒 Файл не покидает устройство — вся обработка в вашей вкладке.</span>
+  <span>Захват видео идёт в реальном времени: экспорт 30-секундного фрагмента займёт ~30 секунд.</span>
+  <span>Требуется браузер с WebCodecs: <b>Chrome / Edge 94+</b> (Safari — частично).</span>
+</footer>
+</div>
+
+<div id="toasts"></div>
+<input type="file" id="fileInput" accept="video/*,audio/*,.mkv,.mov,.mp4,.webm,.avi" hidden>
+<video id="thumbVideo" muted playsinline preload="auto" hidden></video>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const el = {
+  drop:$('dropSection'), dz:$('dropzone'), pick:$('pickBtn'), file:$('fileInput'), replace:$('replaceBtn'),
+  editor:$('editor'), codecChip:$('codecChip'),
+  preview:$('preview'), playBtn:$('playBtn'), icoPlay:$('icoPlay'), icoPause:$('icoPause'),
+  rec:$('recBadge'), tcNow:$('tcNow'), tcDur:$('tcDur'),
+  ruler:$('ruler'), lanes:$('lanes'), film:$('filmstrip'), wave:$('wave'), waveNote:$('waveNote'),
+  shadeL:$('shadeL'), shadeR:$('shadeR'), hIn:$('hIn'), hOut:$('hOut'), playhead:$('playhead'), phFlag:$('phFlag'),
+  inTC:$('inTC'), outTC:$('outTC'), lenChip:$('lenChip'), selLen:$('selLen'), resetRange:$('resetRange'),
+  setIn:$('setInBtn'), setOut:$('setOutBtn'), thumbVideo:$('thumbVideo'),
+  mName:$('mName'), mSize:$('mSize'), mDur:$('mDur'), mRes:$('mRes'), mAud:$('mAud'),
+  barV:$('barV'), barA:$('barA'), statV:$('statV'), statA:$('statA'), pctV:$('pctV'), pctA:$('pctA'),
+  ledV:$('ledV'), ledA:$('ledA'), resV:$('resV'), resA:$('resA'),
+  expV:$('exportVideoBtn'), expA:$('exportAudioBtn'), expAll:$('exportAllBtn'),
+  toasts:$('toasts'), steps:$('steps')
+};
+
+const state = { file:null, url:null, duration:0, in:0, out:0, base:'', audioBuffer:null, peaks:null, busy:null };
+let audioCtx=null, thumbToken=0, videoCancel=false;
+const blobs = { v:null, a:null };
+const dpr = () => window.devicePixelRatio || 1;
+
+/* ---------- утилиты ---------- */
+function fmtTC(t){
+  if(!isFinite(t)||t<0) t=0;
+  const ms=Math.floor(t*1000);
+  const h=Math.floor(ms/3600000), m=Math.floor(ms/60000)%60, s=Math.floor(ms/1000)%60, x=ms%1000;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(x).padStart(3,'0')}`;
+}
+function parseTC(str){
+  str=String(str).trim().replace(',', '.');
+  if(!str) return null;
+  const parts=str.split(':');
+  if(parts.length>3) return null;
+  for(const p of parts){ if(p===''||!/^\d*\.?\d*$/.test(p)) return null; }
+  let t=0; for(const p of parts) t=t*60+Number(p);
+  return t;
+}
+const fmtSize = b => b<1024? b+' Б' : b<1048576? (b/1024).toFixed(1)+' КБ' : b<1073741824? (b/1048576).toFixed(1)+' МБ' : (b/1073741824).toFixed(2)+' ГБ';
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const once=(ev, target)=>new Promise((res,rej)=>{
+  target.addEventListener(ev, ()=>res(), {once:true});
+  target.addEventListener('error', ()=>rej(new Error('ошибка медиа')), {once:true});
+});
+function toast(msg,kind=''){
+  const d=document.createElement('div'); d.className='toast '+kind; d.textContent=msg;
+  el.toasts.append(d); setTimeout(()=>{ d.style.opacity='0'; d.style.transition='opacity .4s'; setTimeout(()=>d.remove(),400); }, 4200);
+}
+function download(blob,name){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 30000);
+}
+function step(n, mode){ // mode: 'on' | 'done' | ''
+  el.steps.querySelectorAll('.st').forEach(s=>{
+    const k=+s.dataset.s; s.classList.toggle('on', mode==='on'&&k===n); s.classList.toggle('done', mode==='done'? k<=n : (mode==='on'? k<n : false));
+  });
+}
+
+/* ---------- проверка окружения ---------- */
+const envOK = !!window.VideoEncoder && !!window.AudioEncoder && 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+if(envOK){ el.codecChip.textContent='WebCodecs ✓ можно работать'; el.codecChip.classList.add('ok'); }
+else { el.codecChip.textContent='⚠ WebCodecs недоступен'; el.codecChip.classList.add('bad');
+  toast('Ваш браузер не поддерживает WebCodecs. Откройте в Chrome или Edge 94+.','err'); }
+
+/* ---------- загрузка файла ---------- */
+el.dz.addEventListener('click', ()=>el.file.click());
+el.dz.addEventListener('keydown', e=>{ if(e.key==='Enter') el.file.click(); });
+el.pick.addEventListener('click', e=>{ e.stopPropagation(); el.file.click(); });
+el.replace.addEventListener('click', ()=>el.file.click());
+el.file.addEventListener('change', ()=>{ if(el.file.files[0]) loadFile(el.file.files[0]); el.file.value=''; });
+
+['dragover','dragenter'].forEach(ev=>{
+  window.addEventListener(ev, e=>{ e.preventDefault(); el.dz.classList.add('over'); });
+});
+['dragleave','dragend'].forEach(ev=>window.addEventListener(ev, ()=>el.dz.classList.remove('over')));
+window.addEventListener('drop', e=>{
+  e.preventDefault(); el.dz.classList.remove('over');
+  const f=e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) loadFile(f);
+});
+
+async function loadFile(file){
+  if(state.busy){ toast('Дождитесь завершения экспорта','err'); return; }
+  if(state.url) URL.revokeObjectURL(state.url);
+  state.file=file; state.url=URL.createObjectURL(file);
+  state.base=file.name.replace(/\.[^.]+$/,'');
+  state.audioBuffer=null; state.peaks=null;
+  blobs.v=null; blobs.a=null;
+  el.resV.hidden=true; el.resA.hidden=true;
+  el.film.innerHTML=''; el.waveNote.hidden=false; el.waveNote.textContent='декодирование звука…';
+  setBar('v',0); setBar('a',0); el.statV.textContent='готов к экспорту'; el.pctV.textContent='';
+  el.statA.textContent='анализ звука…'; el.pctA.textContent='';
+  el.mName.textContent=file.name; el.mSize.textContent=fmtSize(file.size);
+  el.mDur.textContent='—'; el.mRes.textContent='—'; el.mAud.textContent='анализ…';
+
+  el.preview.src=state.url; el.thumbVideo.src=state.url;
+  try{ await once('loadedmetadata', el.preview); }catch{ toast('Браузер не смог открыть этот файл','err'); return; }
+
+  // хак для webm без длительности
+  if(!isFinite(el.preview.duration)){
+    el.preview.currentTime=1e7;
+    await new Promise(r=>el.preview.addEventListener('timeupdate', r, {once:true}));
+    el.preview.currentTime=0;
+  }
+  state.duration=el.preview.duration;
+  state.in=0; state.out=state.duration;
+
+  el.drop.hidden=true; el.editor.hidden=false;
+  requestAnimationFrame(()=>{ el.editor.classList.add('show'); drawRuler(); drawWave(); updatePositions(); });
+  el.replace.hidden=false;
+  el.tcDur.textContent=fmtTC(state.duration);
+  el.mDur.textContent=fmtTC(state.duration);
+  el.mRes.textContent=`${el.preview.videoWidth}×${el.preview.videoHeight}`;
+  el.inTC.value='00:00:00.000'; el.outTC.value=fmtTC(state.duration);
+  step(2,'on');
+  genThumbs();
+  decodeAudio();
+}
+
+/* ---------- аудиодекодирование и волна ---------- */
+async function decodeAudio(){
+  try{
+    const ab=await state.file.arrayBuffer();
+    audioCtx = audioCtx || new (window.AudioContext||window.webkitAudioContext)();
+    state.audioBuffer = await audioCtx.decodeAudioData(ab.slice(0));
+    computePeaks();
+    el.waveNote.hidden=true;
+    el.mAud.textContent=`${state.audioBuffer.numberOfChannels} кан. · ${(state.audioBuffer.sampleRate/1000).toFixed(1)} кГц`;
+    el.statA.textContent='готов к экспорту';
+    drawWave();
+  }catch(e){
+    state.audioBuffer=null;
+    el.waveNote.textContent='аудиодорожка не обнаружена';
+    el.mAud.textContent='нет';
+    el.statA.textContent='аудиодорожка недоступна в этом файле';
+  }
+}
+function computePeaks(){
+  const b=state.audioBuffer, N=1500, len=b.length;
+  const c0=b.getChannelData(0), c1=b.numberOfChannels>1? b.getChannelData(1):null;
+  const mins=new Float32Array(N), maxs=new Float32Array(N);
+  const step=len/N;
+  for(let i=0;i<N;i++){
+    const s=Math.floor(i*step), e=Math.min(len, Math.floor((i+1)*step));
+    const stride=Math.max(1, Math.floor((e-s)/60));
+    let mn=1,mx=-1;
+    for(let j=s;j<e;j+=stride){
+      const v=c1? (c0[j]+c1[j])*0.5 : c0[j];
+      if(v<mn)mn=v; if(v>mx)mx=v;
+    }
+    mins[i]=mn; maxs[i]=mx;
+  }
+  state.peaks={mins,maxs,N};
+}
+function drawWave(){
+  const c=el.wave, W=el.lanes.clientWidth, H=50;
+  c.width=W*dpr(); c.height=H*dpr();
+  const x=c.getContext('2d'); x.scale(dpr(),dpr());
+  x.clearRect(0,0,W,H);
+  x.fillStyle='rgba(255,180,84,.14)'; x.fillRect(0,H/2-.5,W,1);
+  if(!state.peaks) return;
+  const {mins,maxs,N}=state.peaks;
+  x.strokeStyle='rgba(255,180,84,.75)'; x.lineWidth=1;
+  x.beginPath();
+  for(let px=0;px<W;px++){
+    const i=Math.min(N-1, Math.floor(px/W*N));
+    const top=H/2 - maxs[i]*(H/2-3), bot=H/2 - mins[i]*(H/2-3);
+    x.moveTo(px+.5, top); x.lineTo(px+.5, Math.max(bot, top+1));
+  }
+  x.stroke();
+}
+
+/* ---------- миниатюры ---------- */
+async function genThumbs(){
+  const token=++thumbToken, vt=el.thumbVideo;
+  const n=clamp(Math.round(el.lanes.clientWidth/95), 6, 16);
+  for(let i=0;i<n;i++){
+    if(token!==thumbToken) return;
+    const t=(i+0.5)/n*state.duration;
+    try{
+      vt.currentTime=t;
+      await new Promise((res,rej)=>{ vt.addEventListener('seeked',res,{once:true}); vt.addEventListener('error',rej,{once:true}); setTimeout(res, 2500); });
+      if(token!==thumbToken) return;
+      const c=document.createElement('canvas'); c.width=96; c.height=54;
+      c.getContext('2d').drawImage(vt,0,0,96,54);
+      c.style.left=((i+0.5)/n*100)+'%';
+      el.film.append(c);
+    }catch{ /* пропускаем кадр */ }
+    await new Promise(r=>setTimeout(r));
+  }
+}
+
+/* ---------- рулетка ---------- */
+function drawRuler(){
+  const c=el.ruler, W=el.lanes.clientWidth, H=24;
+  c.width=(W+20)*dpr(); c.height=H*dpr();
+  c.style.width=(W+20)+'px';
+  const x=c.getContext('2d'); x.scale(dpr(),dpr());
+  x.clearRect(0,0,W+20,H);
+  const d=state.duration; if(!d) return;
+  const target=d/9, opts=[0.1,0.2,0.5,1,2,5,10,15,30,60,120,300,600,1800,3600];
+  const major=opts.find(o=>o>=target)||3600, minor=major/5;
+  x.font='10px IBM Plex Mono, monospace'; x.fillStyle='#5c6c85'; x.strokeStyle='#28354a';
+  const pad=10;
+  for(let i=0, t=0; t<=d+1e-6; i++, t=i*minor){
+    const px=pad+t/d*W;
+    const isMaj=i%5===0;
+    x.beginPath(); x.moveTo(px, H); x.lineTo(px, isMaj? H-13 : H-7); x.stroke();
+    if(isMaj){
+      const s=Math.round(t);
+      const lbl= s>=3600 ? `${Math.floor(s/3600)}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`
+                        : `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+      x.fillText(lbl, px+3, 10);
+    }
+  }
+}
+
+/* ---------- позиции и синхронизация ---------- */
+function updatePositions(){
+  const d=state.duration; if(!d) return;
+  const pIn=state.in/d*100, pOut=state.out/d*100, pNow=clamp(el.preview.currentTime/d*100,0,100);
+  el.hIn.style.left=pIn+'%'; el.hOut.style.left=pOut+'%';
+  el.playhead.style.left=pNow+'%';
+  el.shadeL.style.left='0'; el.shadeL.style.width=pIn+'%';
+  el.shadeR.style.left=pOut+'%'; el.shadeR.style.width=(100-pOut)+'%';
+  el.phFlag.textContent=fmtTC(el.preview.currentTime);
+  el.tcNow.textContent=fmtTC(el.preview.currentTime);
+  const len=fmtTC(state.out-state.in);
+  el.selLen.textContent=len; el.lenChip.textContent='Δ '+len;
+  if(document.activeElement!==el.inTC) el.inTC.value=fmtTC(state.in);
+  if(document.activeElement!==el.outTC) el.outTC.value=fmtTC(state.out);
+}
+(function loop(){
+  requestAnimationFrame(loop);
+  if(!state.duration) return;
+  if(!el.preview.paused && el.preview.currentTime>=state.out-0.01){
+    el.preview.pause(); el.preview.currentTime=state.out;
+  }
+  updatePositions();
+})();
+el.preview.addEventListener('play',  ()=>{ el.icoPlay.hidden=true;  el.icoPause.hidden=false; });
+el.preview.addEventListener('pause', ()=>{ el.icoPlay.hidden=false; el.icoPause.hidden=true;  });
+el.preview.addEventListener('error', ()=>{ if(state.url) toast('Не удалось воспроизвести файл','err'); });
+
+el.playBtn.addEventListener('click', togglePlay);
+function togglePlay(){
+  if(!state.duration) return;
+  if(el.preview.paused){
+    if(el.preview.currentTime>=state.out-0.05 || el.preview.currentTime<state.in) el.preview.currentTime=state.in;
+    el.preview.play().catch(()=>{});
+  } else el.preview.pause();
+}
+
+/* ---------- перетаскивание по таймлайну ---------- */
+let dragMode=null;
+function timeFromX(clientX){
+  const r=el.lanes.getBoundingClientRect();
+  return clamp((clientX-r.left-10)/(r.width-20), 0, 1)*state.duration;
+}
+const GAP=0.05;
+function applyDrag(e){
+  const t=timeFromX(e.clientX);
+  if(dragMode==='in'){ state.in=clamp(t, 0, state.out-GAP); }
+  else if(dragMode==='out'){ state.out=clamp(t, state.in+GAP, state.duration); }
+  else { el.preview.currentTime=t; }
+  updatePositions();
+}
+el.lanes.addEventListener('pointerdown', e=>{
+  if(!state.duration) return;
+  const h=e.target.closest('.handle');
+  dragMode = h===el.hIn ? 'in' : h===el.hOut ? 'out' : 'seek';
+  if(dragMode==='seek') el.preview.pause();
+  el.lanes.setPointerCapture(e.pointerId);
+  applyDrag(e);
+});
+el.lanes.addEventListener('pointermove', e=>{ if(dragMode) applyDrag(e); });
+el.lanes.addEventListener('pointerup', ()=>dragMode=null);
+el.lanes.addEventListener('pointercancel', ()=>dragMode=null);
+el.ruler.addEventListener('pointerdown', e=>{
+  if(!state.duration) return;
+  dragMode='seek'; el.preview.pause(); el.ruler.setPointerCapture(e.pointerId);
+  const t=timeFromX(e.clientX); el.preview.currentTime=t; updatePositions();
+});
+el.ruler.addEventListener('pointermove', e=>{
+  if(dragMode==='seek'){ el.preview.currentTime=timeFromX(e.clientX); updatePositions(); }
+});
+el.ruler.addEventListener('pointerup', ()=>dragMode=null);
+
+/* ---------- ввод таймкодов и кнопки ---------- */
+function commitInput(input, which){
+  const t=parseTC(input.value);
+  if(t===null){ input.classList.add('bad'); setTimeout(()=>input.classList.remove('bad'),600); toast('Неверный таймкод. Формат: чч:мм:сс.ммм','err'); updatePositions(); return; }
+  if(which==='in') state.in=clamp(t, 0, state.out-GAP);
+  else state.out=clamp(t, state.in+GAP, state.duration);
+  updatePositions();
+}
+[el.inTC, el.outTC].forEach((inp,i)=>{
+  inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ commitInput(inp, i?'out':'in'); inp.blur(); }});
+  inp.addEventListener('blur', ()=>commitInput(inp, i?'out':'in'));
+});
+el.setIn.addEventListener('click', ()=>{ state.in=clamp(el.preview.currentTime,0,state.out-GAP); updatePositions(); });
+el.setOut.addEventListener('click', ()=>{ state.out=clamp(el.preview.currentTime,state.in+GAP,state.duration); updatePositions(); });
+el.resetRange.addEventListener('click', ()=>{ state.in=0; state.out=state.duration; updatePositions(); });
+
+window.addEventListener('keydown', e=>{
+  if(!state.duration || e.target.matches('input,textarea')) return;
+  const stepT=e.shiftKey?1:1/30;
+  if(e.code==='Space'){ e.preventDefault(); togglePlay(); }
+  else if(e.code==='KeyI'){ state.in=clamp(el.preview.currentTime,0,state.out-GAP); updatePositions(); }
+  else if(e.code==='KeyO'){ state.out=clamp(el.preview.currentTime,state.in+GAP,state.duration); updatePositions(); }
+  else if(e.code==='ArrowLeft'){ el.preview.pause(); el.preview.currentTime=clamp(el.preview.currentTime-stepT,0,state.duration); }
+  else if(e.code==='ArrowRight'){ el.preview.pause(); el.preview.currentTime=clamp(el.preview.currentTime+stepT,0,state.duration); }
+  else if(e.code==='Home'){ el.preview.currentTime=0; }
+});
+
+window.addEventListener('resize', ()=>{ if(!state.duration) return; drawRuler(); drawWave(); updatePositions(); });
+
+/* ---------- экспорт ---------- */
+function setBar(k,f){ const b=k==='v'?el.barV:el.barA; b.style.width=(clamp(f,0,1)*100).toFixed(1)+'%'; b.classList.toggle('busy', f>0&&f<1); }
+function setBusy(k,on){
+  const card=el.expV.closest('.export-card');
+  if(k==='v'){ el.expV.disabled=on; el.ledV.classList.toggle('busy',on); }
+  if(k==='a'){ el.expA.disabled=on; el.ledA.classList.toggle('busy',on); }
+  el.expAll.disabled=on||!state.duration;
+}
+
+async function pickVideoCodec(w,h,fps,bitrate){
+  const list=['avc1.640033','avc1.640032','avc1.64002A','avc1.640028','avc1.4D4028','avc1.42001f'];
+  for(const codec of list){
+    try{
+      const r=await VideoEncoder.isConfigSupported({codec,width:w,height:h,bitrate,framerate:fps});
+      if(r.supported) return codec;
+    }catch{}
+  }
+  throw new Error('кодировщик H.264 не поддерживается');
+}
+
+async function exportVideo(){
+  if(state.busy){ toast('Уже идёт другая операция','err'); return; }
+  if(!window.Mp4Muxer){ toast('Не загрузилась библиотека mp4-muxer — проверьте интернет и перезагрузите страницу','err'); return; }
+  if(state.out-state.in<0.1){ toast('Диапазон обрезки слишком короткий','err'); return; }
+  state.busy='video'; setBusy('v',true); videoCancel=false;
+  el.rec.hidden=false; step(3,'on');
+  el.statV.textContent='подготовка…'; el.pctV.textContent='';
+  const t0=state.in, t1=state.out;
+  try{
+    const v=document.createElement('video');
+    v.muted=true; v.playsInline=true; v.preload='auto'; v.src=state.url;
+    v.style.cssText='position:fixed;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none;z-index:-1';
+    document.body.append(v);
+    await once('loadedmetadata', v);
+    const vw=v.videoWidth, vh=v.videoHeight;
+    if(!vw) throw new Error('в файле нет видеоданных');
+    const w=vw-(vw%2), h=vh-(vh%2), fps=30;
+    const bitrate=clamp(Math.round(w*h*fps*0.12), 2_000_000, 24_000_000);
+    const codec=await pickVideoCodec(w,h,fps,bitrate);
+    const muxer=new Mp4Muxer.Muxer({
+      target:new Mp4Muxer.ArrayBufferTarget(),
+      video:{codec:'avc',width:w,height:h},
+      fastStart:'in-memory', firstTimestampBehavior:'offset'
+    });
+    let encErr=null;
+    const enc=new VideoEncoder({ output:(ch,meta)=>muxer.addVideoChunk(ch,meta), error:e=>encErr=e });
+    enc.configure({codec,width:w,height:h,bitrate,framerate:fps});
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    const cx=cv.getContext('2d');
+    v.currentTime=Math.max(0, t0-0.2);
+    await once('seeked', v);
+    await v.play();
+    let base=null, lastT=null, count=0; const kf=Math.max(1, fps*2);
+    await new Promise((res,rej)=>{
+      const frame=(_,meta)=>{
+        if(videoCancel) return rej(new Error('cancelled'));
+        if(encErr) return rej(encErr);
+        const t=meta.mediaTime;
+        if(t>=t1-1e-3) return res();
+        if(t>=t0-1e-3){
+          if(base===null) base=t;
+          cx.drawImage(v, 0,0, vw-(vw%2), vh-(vh%2), 0,0, w,h);
+          const ts=Math.round((t-base)*1e6);
+          const du=lastT!==null? Math.max(1,Math.round((t-lastT)*1e6)) : 33333;
+          const f=new VideoFrame(cv,{timestamp:ts,duration:du});
+          enc.encode(f,{keyFrame:count%kf===0}); f.close();
+          lastT=t; count++;
+          const p=clamp((t-t0)/(t1-t0),0,1);
+          setBar('v',p);
+          el.statV.textContent=`захват кадров · ${count} шт.`;
+          el.pctV.textContent=Math.round(p*100)+'%';
+        }
+        v.requestVideoFrameCallback(frame);
+      };
+      v.requestVideoFrameCallback(frame);
+      v.addEventListener('ended', res, {once:true});
+    });
+    v.pause(); v.remove();
+    el.statV.textContent='финализация…'; setBar('v',.98);
+    await enc.flush(); enc.close();
+    muxer.finalize();
+    blobs.v=new Blob([muxer.target.buffer],{type:'video/mp4'});
+    const name=state.base+'_video.mp4';
+    showResult('v', name, blobs.v.size);
+    setBar('v',1); el.statV.textContent='готово ✓'; el.pctV.textContent='';
+    toast('Видеодорожка готова: '+name,'ok'); step(3,'done');
+  }catch(e){
+    if(e && e.message==='cancelled'){ toast('Экспорт видео отменён'); }
+    else toast('Ошибка экспорта видео: '+(e&&e.message||e),'err');
+    setBar('v',0); el.statV.textContent='готов к экспорту'; el.pctV.textContent='';
+  }finally{
+    state.busy=null; setBusy('v',false); el.rec.hidden=true;
+  }
+}
+
+async function exportAudio(){
+  if(state.busy){ toast('Уже идёт другая операция','err'); return; }
+  if(!window.Mp4Muxer){ toast('Не загрузилась библиотека mp4-muxer — проверьте интернет','err'); return; }
+  if(!state.audioBuffer){ toast(state.audioBuffer===null? 'Аудиодорожка недоступна':'Звук ещё анализируется, подождите','err'); return; }
+  if(state.out-state.in<0.05){ toast('Диапазон обрезки слишком короткий','err'); return; }
+  state.busy='audio'; setBusy('a',true); step(3,'on');
+  el.statA.textContent='кодирование…';
+  try{
+    const buf=state.audioBuffer, sr=buf.sampleRate;
+    const chOut=Math.min(buf.numberOfChannels,2);
+    const s0=Math.max(0,Math.floor(state.in*sr)), s1=Math.min(buf.length,Math.ceil(state.out*sr));
+    const total=s1-s0;
+    if(total<sr*0.05) throw new Error('слишком короткий фрагмент');
+    let cfg={codec:'mp4a.40.2',sampleRate:sr,numberOfChannels:chOut,bitrate:192000};
+    const sup=await AudioEncoder.isConfigSupported(cfg);
+    if(!sup.supported) throw new Error('кодировщик AAC не поддерживается');
+    if(sup.config) cfg=Object.assign({},cfg,sup.config);
+    const muxer=new Mp4Muxer.Muxer({
+      target:new Mp4Muxer.ArrayBufferTarget(),
+      audio:{codec:'aac',numberOfChannels:chOut,sampleRate:sr},
+      fastStart:'in-memory'
+    });
+    let encErr=null;
+    const enc=new AudioEncoder({ output:(c,m)=>muxer.addAudioChunk(c,m), error:e=>encErr=e });
+    enc.configure(cfg);
+    const src=[]; for(let c=0;c<chOut;c++) src.push(buf.getChannelData(c).subarray(s0,s1));
+    const CHUNK=Math.min(sr,65536); let off=0, it=0;
+    while(off<total){
+      if(encErr) throw encErr;
+      const n=Math.min(CHUNK,total-off);
+      const merged=new Float32Array(n*chOut);
+      for(let c=0;c<chOut;c++) merged.set(src[c].subarray(off,off+n), c*n);
+      const ad=new AudioData({format:'f32-planar',sampleRate:sr,numberOfFrames:n,
+        timestamp:Math.round(off/sr*1e6), data:merged.buffer});
+      enc.encode(ad); ad.close();
+      off+=n; it++;
+      const p=off/total;
+      setBar('a',p); el.pctA.textContent=Math.round(p*100)+'%';
+      el.statA.textContent=`кодирование · ${Math.round(off/sr)} из ${(total/sr).toFixed(1)} с`;
+      if(it%4===0) await new Promise(r=>setTimeout(r));
+    }
+    el.statA.textContent='финализация…'; setBar('a',.98);
+    await enc.flush(); enc.close();
+    muxer.finalize();
+    blobs.a=new Blob([muxer.target.buffer],{type:'audio/mp4'});
+    const name=state.base+'_audio.m4a';
+    showResult('a', name, blobs.a.size);
+    setBar('a',1); el.statA.textContent='готово ✓'; el.pctA.textContent='';
+    toast('Аудиодорожка готова: '+name,'ok'); step(3,'done');
+  }catch(e){
+    toast('Ошибка экспорта аудио: '+(e&&e.message||e),'err');
+    setBar('a',0); el.statA.textContent='готов к экспорту'; el.pctA.textContent='';
+  }finally{
+    state.busy=null; setBusy('a',false);
+  }
+}
+
+function showResult(k,name,size){
+  const box=k==='v'?el.resV:el.resA;
+  box.hidden=false;
+  box.querySelector('span').textContent=`✓ ${name} · ${fmtSize(size)}`;
+  box.querySelector('button').onclick=()=>{ if(blobs[k]) download(blobs[k],name); };
+}
+
+el.expV.addEventListener('click', exportVideo);
+el.expA.addEventListener('click', exportAudio);
+el.expAll.addEventListener('click', async ()=>{
+  await exportVideo();
+  if(state.audioBuffer) await exportAudio();
+});
+})();
+</script>
+</body>
+</html>
