@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- попытка №1: статическая загрузка (если не выйдет — сработает динамический загрузчик) -->
 <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js"></script>
 <style>
   :root{
@@ -22,41 +23,30 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{color-scheme:dark}
-  body{
-    font-family:var(--body); color:var(--ink); background:var(--bg);
-    min-height:100vh; overflow-x:hidden;
-  }
-  /* ---------- ambient background ---------- */
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);min-height:100vh;overflow-x:hidden}
   .bg{position:fixed;inset:0;z-index:-2;background:
     radial-gradient(900px 520px at 12% -6%, rgba(76,201,255,.10), transparent 60%),
-    radial-gradient(820px 560px at 96% 108%, rgba(255,180,84,.09), transparent 60%),
-    var(--bg);}
+    radial-gradient(820px 560px at 96% 108%, rgba(255,180,84,.09), transparent 60%),var(--bg);}
   .scan{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.35;
     background:repeating-linear-gradient(0deg, rgba(255,255,255,.016) 0 1px, transparent 1px 3px);}
   ::selection{background:rgba(76,201,255,.35)}
-
   .wrap{max-width:1440px;margin:0 auto;padding:18px 26px 40px}
 
-  /* ---------- topbar ---------- */
   header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:6px 0 18px;border-bottom:1px solid var(--line)}
   .brand{display:flex;align-items:center;gap:14px}
   .brand svg{flex:none}
   .brand h1{font-family:var(--disp);font-weight:900;font-size:24px;letter-spacing:.02em;line-height:1}
   .brand h1 b{color:var(--v);font-weight:900}
   .brand p{font-size:12px;color:var(--mut);margin-top:5px;letter-spacing:.04em}
-  .top-right{display:flex;align-items:center;gap:10px}
+  .top-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .chip{font-family:var(--mono);font-size:11px;padding:5px 10px;border:1px solid var(--line2);border-radius:6px;color:var(--mut);background:var(--panel)}
   .chip.ok{color:var(--ok);border-color:rgba(94,227,154,.4)}
   .chip.bad{color:var(--err);border-color:rgba(255,107,107,.45)}
 
-  /* ---------- buttons ---------- */
-  .btn{
-    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
     font-family:var(--body);font-weight:600;font-size:13.5px;color:var(--ink);
     background:#22304a;border:1px solid var(--line2);border-radius:8px;
-    padding:9px 16px;cursor:pointer;transition:transform .15s ease, box-shadow .2s ease, border-color .2s, background .2s;
-    user-select:none;
-  }
+    padding:9px 16px;cursor:pointer;transition:transform .15s ease, box-shadow .2s ease, border-color .2s, background .2s;user-select:none}
   .btn:hover{transform:translateY(-1px);border-color:#4a6390}
   .btn:active{transform:translateY(0)}
   .btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
@@ -72,7 +62,6 @@
   .linklike{background:none;border:none;color:var(--v);font:inherit;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
   .linklike:hover{color:#8fdcff}
 
-  /* ---------- panels ---------- */
   .panel{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .panel-head{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
   .panel-head h3{font-family:var(--disp);font-weight:700;font-size:11px;letter-spacing:.22em;color:#c8d6ea}
@@ -86,22 +75,16 @@
   .tc{font-family:var(--mono);font-size:12px;color:var(--mut)}
   .tc b{color:var(--ink);font-weight:600}
 
-  /* ---------- drop stage ---------- */
   #dropSection{padding-top:34px}
-  .dropzone{
-    position:relative;min-height:330px;border-radius:14px;cursor:pointer;
+  .dropzone{position:relative;min-height:330px;border-radius:14px;cursor:pointer;
     background:linear-gradient(160deg,rgba(76,201,255,.05),rgba(255,180,84,.04) 70%),var(--panel);
     display:grid;grid-template-columns:minmax(0,1.2fr) auto;align-items:center;gap:24px;
-    padding:48px 56px;transition:transform .25s ease, box-shadow .25s ease, background .25s;
-  }
+    padding:48px 56px;transition:transform .25s ease, box-shadow .25s ease, background .25s}
   .dropzone:hover{transform:translateY(-3px);box-shadow:0 18px 50px -20px rgba(0,0,0,.7)}
   .dropzone.over{background:linear-gradient(160deg,rgba(76,201,255,.12),rgba(255,180,84,.06) 70%),var(--panel2)}
   .dz-border{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-  .dz-border rect{
-    x:2px;y:2px;width:calc(100% - 4px);height:calc(100% - 4px);rx:13px;
-    fill:none;stroke:#3b4c66;stroke-width:2;stroke-dasharray:10 9;
-    animation:dash 22s linear infinite;transition:stroke .25s;
-  }
+  .dz-border rect{x:2px;y:2px;width:calc(100% - 4px);height:calc(100% - 4px);rx:13px;
+    fill:none;stroke:#3b4c66;stroke-width:2;stroke-dasharray:10 9;animation:dash 22s linear infinite;transition:stroke .25s}
   .dropzone.over .dz-border rect{stroke:var(--v);animation-duration:5s}
   @keyframes dash{to{stroke-dashoffset:-380}}
   .dz-copy h2{font-family:var(--disp);font-weight:900;font-size:clamp(26px,3.4vw,40px);line-height:1.12;letter-spacing:.01em}
@@ -109,7 +92,6 @@
   .dz-copy .pick{margin:16px 0 10px;font-size:16px;color:var(--mut)}
   .dz-hint{font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.03em}
   .dz-hint span{color:var(--mut)}
-  .dz-art{opacity:.95}
   .steps{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:22px 6px 0;font-family:var(--mono);font-size:11.5px;color:var(--dim);letter-spacing:.08em}
   .steps .st{display:flex;align-items:center;gap:8px;padding:7px 12px;border:1px solid var(--line);border-radius:7px;background:var(--panel);transition:all .3s}
   .steps .st i{font-style:normal;color:var(--dim)}
@@ -118,7 +100,6 @@
   .steps .st.done{color:var(--ok);border-color:rgba(94,227,154,.35)}
   .steps .arr{color:var(--line2)}
 
-  /* ---------- editor ---------- */
   .editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 372px;gap:18px;padding-top:20px}
   .left-col{display:flex;flex-direction:column;gap:18px;min-width:0}
   .right-col{display:flex;flex-direction:column;gap:16px}
@@ -128,7 +109,6 @@
   .editor.show .right-col .panel:nth-of-type(3){animation-delay:.18s}
   @keyframes rise{to{opacity:1;transform:none}}
 
-  /* monitor */
   .monitor{background:#05070c;display:flex;justify-content:center}
   .monitor video{width:100%;max-height:54vh;display:block;background:#000}
   .monitor-wrap{position:relative;width:100%}
@@ -136,14 +116,12 @@
   .rec i{font-style:normal;animation:pulse 0.8s infinite;color:#ff5d73}
   .transport{display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid var(--line);flex-wrap:wrap}
   .playbtn{width:46px;height:46px;border-radius:50%;flex:none;border:1px solid #2f89b8;cursor:pointer;
-    background:linear-gradient(180deg,#1c5f86,#123f5c);display:flex;align-items:center;justify-content:center;
-    transition:transform .15s, box-shadow .2s}
+    background:linear-gradient(180deg,#1c5f86,#123f5c);display:flex;align-items:center;justify-content:center;transition:transform .15s, box-shadow .2s}
   .playbtn:hover{transform:scale(1.06);box-shadow:0 0 22px -4px rgba(76,201,255,.55)}
   .playbtn svg{fill:#dff4ff}
   .transport .tc.big{font-size:14px}
   .io-btns{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
 
-  /* timeline */
   .trim-row{display:flex;align-items:center;gap:10px;padding:12px 14px 0;flex-wrap:wrap}
   .trim-row label{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--mut)}
   .trim-row input{font-family:var(--mono);font-size:13px;width:128px;background:#0b111a;border:1px solid var(--line2);color:var(--ink);border-radius:6px;padding:7px 9px;transition:border-color .2s, box-shadow .2s}
@@ -171,17 +149,14 @@
   .handle{position:absolute;top:-4px;bottom:-4px;width:13px;margin-left:-6px;z-index:6;cursor:ew-resize;border-radius:4px;transition:transform .12s}
   .handle::after{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:3px;border-radius:2px}
   .handle:hover{transform:scaleY(1.05)}
-  .h-in{background:rgba(76,201,255,.18);border:1px solid var(--v)}
-  .h-in::after{background:var(--v)}
-  .h-out{background:rgba(76,201,255,.18);border:1px solid var(--v)}
-  .h-out::after{background:var(--v)}
+  .h-in,.h-out{background:rgba(76,201,255,.18);border:1px solid var(--v)}
+  .h-in::after,.h-out::after{background:var(--v)}
   .playhead{position:absolute;top:-6px;bottom:0;width:2px;margin-left:-1px;background:var(--ph);z-index:7;pointer-events:none;box-shadow:0 0 8px rgba(255,77,109,.8)}
   .playhead::before{content:"";position:absolute;top:0;left:-4px;border:5px solid transparent;border-top-color:var(--ph)}
   .ph-flag{position:absolute;top:-8px;left:8px;transform:translateY(-100%);font-family:var(--mono);font-size:10px;background:#2a1219;border:1px solid rgba(255,77,109,.55);color:#ffc2cd;border-radius:4px;padding:2px 6px;white-space:nowrap}
   .tl-hint{font-family:var(--mono);font-size:10.5px;color:var(--dim);padding:0 14px 12px;letter-spacing:.04em}
   .tl-hint kbd{border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-size:10px;background:#1a2434;color:var(--mut)}
 
-  /* file & export panels */
   .file-rows{padding:12px 14px;display:grid;gap:8px}
   .file-rows .row{display:flex;justify-content:space-between;gap:12px;font-size:12.5px}
   .file-rows .row b{font-weight:500;color:var(--mut);flex:none}
@@ -209,8 +184,8 @@
   footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:10px 26px;font-size:11.5px;color:var(--dim)}
   footer kbd{border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:var(--mono);font-size:10px;background:#1a2434;color:var(--mut)}
 
-  #toasts{position:fixed;left:20px;bottom:20px;z-index:50;display:flex;flex-direction:column;gap:8px}
-  .toast{font-size:13px;padding:11px 16px;border-radius:8px;background:#1c2534;border:1px solid var(--line2);box-shadow:0 10px 30px -10px rgba(0,0,0,.6);animation:tin .3s cubic-bezier(.2,.9,.3,1.2)}
+  #toasts{position:fixed;left:20px;bottom:20px;z-index:50;display:flex;flex-direction:column;gap:8px;max-width:min(480px,90vw)}
+  .toast{font-size:13px;padding:11px 16px;border-radius:8px;background:#1c2534;border:1px solid var(--line2);box-shadow:0 10px 30px -10px rgba(0,0,0,.6);animation:tin .3s cubic-bezier(.2,.9,.3,1.2);overflow-wrap:anywhere}
   .toast.ok{border-color:rgba(94,227,154,.5);color:#c9f5dd}
   .toast.err{border-color:rgba(255,107,107,.55);color:#ffd4d4}
   @keyframes tin{from{opacity:0;transform:translateX(-16px)}}
@@ -244,11 +219,11 @@
   </div>
   <div class="top-right">
     <span class="chip" id="codecChip">проверка WebCodecs…</span>
+    <span class="chip" id="muxChip">mp4-muxer: загрузка…</span>
     <button class="btn ghost" id="replaceBtn" hidden>⟲ Заменить файл</button>
   </div>
 </header>
 
-<!-- ======== ЭТАП 1: ЗАГРУЗКА ======== -->
 <section id="dropSection">
   <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Загрузить видеофайл">
     <svg class="dz-border" aria-hidden="true"><rect/></svg>
@@ -267,10 +242,7 @@
       <path d="M82 60 C 140 60, 150 44, 250 44" stroke="#4cc9ff" stroke-width="3" stroke-linecap="round"/>
       <path d="M82 120 C 140 120, 150 136, 250 136" stroke="#ffb454" stroke-width="3" stroke-linecap="round"/>
       <path d="M150 136 l8 -14 8 24 8 -32 8 22 8 -10 8 10" stroke="#ffb454" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
-      <rect x="160" y="32" width="6" height="24" rx="2" fill="#4cc9ff" opacity=".55"/>
-      <rect x="196" y="32" width="6" height="24" rx="2" fill="#4cc9ff" opacity=".85"/>
       <circle cx="130" cy="90" r="17" stroke="#ff4d6d" stroke-width="2.5"/>
-      <path d="M122 98 L138 82 M122 82 L138 98" stroke="#ff4d6d" stroke-width="2.5" stroke-linecap="round" opacity="0"/>
       <path d="M124 90 h12" stroke="#ff4d6d" stroke-width="2.5" stroke-linecap="round"/>
     </svg>
   </div>
@@ -281,11 +253,9 @@
   </div>
 </section>
 
-<!-- ======== ЭТАП 2: РЕДАКТОР ======== -->
 <section class="editor" id="editor" hidden>
   <div class="editor-grid">
     <div class="left-col">
-      <!-- монитор -->
       <section class="panel">
         <div class="panel-head">
           <span class="led v"></span><h3>МОНИТОР</h3><span class="idx">01</span>
@@ -310,7 +280,6 @@
         </div>
       </section>
 
-      <!-- монтажная область -->
       <section class="panel">
         <div class="panel-head">
           <span class="led" style="background:var(--ph);box-shadow:0 0 8px rgba(255,77,109,.8)"></span>
@@ -340,7 +309,6 @@
     </div>
 
     <aside class="right-col">
-      <!-- файл -->
       <section class="panel">
         <div class="panel-head"><span class="led" style="background:#c8d6ea"></span><h3>ИСХОДНИК</h3><span class="idx">SRC</span></div>
         <div class="file-rows">
@@ -352,7 +320,6 @@
         </div>
       </section>
 
-      <!-- экспорт видео -->
       <section class="panel export-card card-video">
         <div class="panel-head"><span class="led v" id="ledV"></span><h3>ДОРОЖКА ВИДЕО</h3><span class="idx">A</span><span class="spacer"></span><span class="tc">MP4 · H.264 · без звука</span></div>
         <div class="x-body">
@@ -367,7 +334,6 @@
         </div>
       </section>
 
-      <!-- экспорт аудио -->
       <section class="panel export-card card-audio">
         <div class="panel-head"><span class="led a" id="ledA"></span><h3>ДОРОЖКА АУДИО</h3><span class="idx">B</span><span class="spacer"></span><span class="tc">M4A · AAC · 192 kbps</span></div>
         <div class="x-body">
@@ -404,7 +370,7 @@
 const $ = id => document.getElementById(id);
 const el = {
   drop:$('dropSection'), dz:$('dropzone'), pick:$('pickBtn'), file:$('fileInput'), replace:$('replaceBtn'),
-  editor:$('editor'), codecChip:$('codecChip'),
+  editor:$('editor'), codecChip:$('codecChip'), muxChip:$('muxChip'),
   preview:$('preview'), playBtn:$('playBtn'), icoPlay:$('icoPlay'), icoPause:$('icoPause'),
   rec:$('recBadge'), tcNow:$('tcNow'), tcDur:$('tcDur'),
   ruler:$('ruler'), lanes:$('lanes'), film:$('filmstrip'), wave:$('wave'), waveNote:$('waveNote'),
@@ -422,6 +388,60 @@ const state = { file:null, url:null, duration:0, in:0, out:0, base:'', audioBuff
 let audioCtx=null, thumbToken=0, videoCancel=false;
 const blobs = { v:null, a:null };
 const dpr = () => window.devicePixelRatio || 1;
+
+/* ================= ЗАГРУЗЧИК mp4-muxer ================= */
+let MUX = null;
+function globalMux(){
+  const g = window.Mp4Muxer || window.mp4muxer || window.MP4Muxer;
+  return (g && g.Muxer && g.ArrayBufferTarget) ? g : null;
+}
+function loadScript(url, timeout=7000){
+  return new Promise((res, rej)=>{
+    const s=document.createElement('script');
+    s.src=url;
+    const t=setTimeout(()=>{ s.remove(); rej(new Error('timeout')); }, timeout);
+    s.onload=()=>{ clearTimeout(t); res(); };
+    s.onerror=()=>{ clearTimeout(t); s.remove(); rej(new Error('script load error')); };
+    document.head.append(s);
+  });
+}
+async function ensureMuxer(){
+  if (MUX) return MUX;
+  MUX = globalMux(); if (MUX) return MUX;          // вдруг статический тег в <head> сработал
+  const tried = [];
+  // 1) IIFE-сборки: несколько CDN, версий и локальный файл
+  const iife = [
+    'https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js',
+    'https://unpkg.com/mp4-muxer@5/build/mp4muxer.js',
+    'https://cdn.jsdelivr.net/npm/mp4-muxer@4/build/mp4muxer.js',
+    'https://unpkg.com/mp4-muxer@4/build/mp4muxer.js',
+    './mp4muxer.js'
+  ];
+  for (const u of iife){
+    tried.push(u);
+    try { await loadScript(u); MUX = globalMux(); if (MUX) return MUX; } catch(e){}
+  }
+  // 2) ES-модуль (самый надёжный путь — собирается самим CDN)
+  const esm = [
+    'https://cdn.jsdelivr.net/npm/mp4-muxer@5/+esm',
+    'https://esm.sh/mp4-muxer@5',
+    'https://unpkg.com/mp4-muxer@5/build/mp4muxer.es.js'
+  ];
+  for (const u of esm){
+    tried.push(u);
+    try { const m = await import(u); if (m && m.Muxer) return (MUX = m); } catch(e){}
+  }
+  throw new Error('Не удалось загрузить библиотеку мультиплексирования mp4-muxer ни с одного источника (' +
+    'пробовали: ' + tried.join(' | ') + '). Если доступ к CDN закрыт — скачайте файл ' +
+    'https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js и сохраните его как mp4muxer.js рядом с index.html.');
+}
+ensureMuxer()
+  .then(()=>{ el.muxChip.textContent='mp4-muxer ✓'; el.muxChip.classList.add('ok'); })
+  .catch(()=>{ el.muxChip.textContent='⚠ mp4-muxer не найден'; el.muxChip.classList.add('bad');
+    toast('Не удалось загрузить mp4-muxer автоматически. Подробности — в консоли (F12).','err');
+    console.warn('mp4-muxer: автозагрузка не удалась. Положите файл рядом с index.html: https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js');
+  });
+/* ======================================================== */
 
 /* ---------- утилиты ---------- */
 function fmtTC(t){
@@ -447,15 +467,17 @@ const once=(ev, target)=>new Promise((res,rej)=>{
 });
 function toast(msg,kind=''){
   const d=document.createElement('div'); d.className='toast '+kind; d.textContent=msg;
-  el.toasts.append(d); setTimeout(()=>{ d.style.opacity='0'; d.style.transition='opacity .4s'; setTimeout(()=>d.remove(),400); }, 4200);
+  el.toasts.append(d); setTimeout(()=>{ d.style.opacity='0'; d.style.transition='opacity .4s'; setTimeout(()=>d.remove(),400); }, 5200);
 }
 function download(blob,name){
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
   document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 30000);
 }
-function step(n, mode){ // mode: 'on' | 'done' | ''
+function step(n, mode){
   el.steps.querySelectorAll('.st').forEach(s=>{
-    const k=+s.dataset.s; s.classList.toggle('on', mode==='on'&&k===n); s.classList.toggle('done', mode==='done'? k<=n : (mode==='on'? k<n : false));
+    const k=+s.dataset.s;
+    s.classList.toggle('on', mode==='on'&&k===n);
+    s.classList.toggle('done', mode==='done' ? k<=n : (mode==='on' ? k<n : false));
   });
 }
 
@@ -472,9 +494,7 @@ el.pick.addEventListener('click', e=>{ e.stopPropagation(); el.file.click(); });
 el.replace.addEventListener('click', ()=>el.file.click());
 el.file.addEventListener('change', ()=>{ if(el.file.files[0]) loadFile(el.file.files[0]); el.file.value=''; });
 
-['dragover','dragenter'].forEach(ev=>{
-  window.addEventListener(ev, e=>{ e.preventDefault(); el.dz.classList.add('over'); });
-});
+['dragover','dragenter'].forEach(ev=>window.addEventListener(ev, e=>{ e.preventDefault(); el.dz.classList.add('over'); }));
 ['dragleave','dragend'].forEach(ev=>window.addEventListener(ev, ()=>el.dz.classList.remove('over')));
 window.addEventListener('drop', e=>{
   e.preventDefault(); el.dz.classList.remove('over');
@@ -499,7 +519,6 @@ async function loadFile(file){
   el.preview.src=state.url; el.thumbVideo.src=state.url;
   try{ await once('loadedmetadata', el.preview); }catch{ toast('Браузер не смог открыть этот файл','err'); return; }
 
-  // хак для webm без длительности
   if(!isFinite(el.preview.duration)){
     el.preview.currentTime=1e7;
     await new Promise(r=>el.preview.addEventListener('timeupdate', r, {once:true}));
@@ -682,7 +701,7 @@ el.lanes.addEventListener('pointercancel', ()=>dragMode=null);
 el.ruler.addEventListener('pointerdown', e=>{
   if(!state.duration) return;
   dragMode='seek'; el.preview.pause(); el.ruler.setPointerCapture(e.pointerId);
-  const t=timeFromX(e.clientX); el.preview.currentTime=t; updatePositions();
+  el.preview.currentTime=timeFromX(e.clientX); updatePositions();
 });
 el.ruler.addEventListener('pointermove', e=>{
   if(dragMode==='seek'){ el.preview.currentTime=timeFromX(e.clientX); updatePositions(); }
@@ -721,7 +740,6 @@ window.addEventListener('resize', ()=>{ if(!state.duration) return; drawRuler();
 /* ---------- экспорт ---------- */
 function setBar(k,f){ const b=k==='v'?el.barV:el.barA; b.style.width=(clamp(f,0,1)*100).toFixed(1)+'%'; b.classList.toggle('busy', f>0&&f<1); }
 function setBusy(k,on){
-  const card=el.expV.closest('.export-card');
   if(k==='v'){ el.expV.disabled=on; el.ledV.classList.toggle('busy',on); }
   if(k==='a'){ el.expA.disabled=on; el.ledA.classList.toggle('busy',on); }
   el.expAll.disabled=on||!state.duration;
@@ -740,7 +758,9 @@ async function pickVideoCodec(w,h,fps,bitrate){
 
 async function exportVideo(){
   if(state.busy){ toast('Уже идёт другая операция','err'); return; }
-  if(!window.Mp4Muxer){ toast('Не загрузилась библиотека mp4-muxer — проверьте интернет и перезагрузите страницу','err'); return; }
+  let mux;
+  try{ el.statV.textContent='подключение библиотеки…'; mux=await ensureMuxer(); }
+  catch(e){ toast(e.message,'err'); el.statV.textContent='готов к экспорту'; return; }
   if(state.out-state.in<0.1){ toast('Диапазон обрезки слишком короткий','err'); return; }
   state.busy='video'; setBusy('v',true); videoCancel=false;
   el.rec.hidden=false; step(3,'on');
@@ -757,8 +777,8 @@ async function exportVideo(){
     const w=vw-(vw%2), h=vh-(vh%2), fps=30;
     const bitrate=clamp(Math.round(w*h*fps*0.12), 2_000_000, 24_000_000);
     const codec=await pickVideoCodec(w,h,fps,bitrate);
-    const muxer=new Mp4Muxer.Muxer({
-      target:new Mp4Muxer.ArrayBufferTarget(),
+    const muxer=new mux.Muxer({
+      target:new mux.ArrayBufferTarget(),
       video:{codec:'avc',width:w,height:h},
       fastStart:'in-memory', firstTimestampBehavior:'offset'
     });
@@ -815,7 +835,9 @@ async function exportVideo(){
 
 async function exportAudio(){
   if(state.busy){ toast('Уже идёт другая операция','err'); return; }
-  if(!window.Mp4Muxer){ toast('Не загрузилась библиотека mp4-muxer — проверьте интернет','err'); return; }
+  let mux;
+  try{ el.statA.textContent='подключение библиотеки…'; mux=await ensureMuxer(); }
+  catch(e){ toast(e.message,'err'); el.statA.textContent='готов к экспорту'; return; }
   if(!state.audioBuffer){ toast(state.audioBuffer===null? 'Аудиодорожка недоступна':'Звук ещё анализируется, подождите','err'); return; }
   if(state.out-state.in<0.05){ toast('Диапазон обрезки слишком короткий','err'); return; }
   state.busy='audio'; setBusy('a',true); step(3,'on');
@@ -830,8 +852,8 @@ async function exportAudio(){
     const sup=await AudioEncoder.isConfigSupported(cfg);
     if(!sup.supported) throw new Error('кодировщик AAC не поддерживается');
     if(sup.config) cfg=Object.assign({},cfg,sup.config);
-    const muxer=new Mp4Muxer.Muxer({
-      target:new Mp4Muxer.ArrayBufferTarget(),
+    const muxer=new mux.Muxer({
+      target:new mux.ArrayBufferTarget(),
       audio:{codec:'aac',numberOfChannels:chOut,sampleRate:sr},
       fastStart:'in-memory'
     });
