@@ -335,15 +335,15 @@
       </section>
 
       <section class="panel export-card card-audio">
-        <div class="panel-head"><span class="led a" id="ledA"></span><h3>ДОРОЖКА АУДИО</h3><span class="idx">B</span><span class="spacer"></span><span class="tc">M4A · AAC · 192 kbps</span></div>
+        <div class="panel-head"><span class="led a" id="ledA"></span><h3>ДОРОЖКА АУДИО</h3><span class="idx">B</span><span class="spacer"></span><span class="tc">M4A·AAC / WebM·Opus — авто</span></div>
         <div class="x-body">
           <div class="x-title">
             <div class="x-ico a"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffb454" stroke-width="1.8" stroke-linecap="round"><path d="M3 12h2M7 8v8M11 4v16M15 7v10M19 10v4M21.5 12h.01"/></svg></div>
-            <div><h4>Звук без картинки</h4><small>обрезанный фрагмент в AAC</small></div>
+            <div><h4>Звук без картинки</h4><small>AAC, если доступен в системе; иначе Opus</small></div>
           </div>
           <div class="bar"><div class="bar-fill" id="barA"></div></div>
           <div class="x-status"><span id="statA">анализ звука…</span><span class="pct" id="pctA"></span></div>
-          <button class="btn big a" id="exportAudioBtn">⬇ Экспорт аудио (.m4a)</button>
+          <button class="btn big a" id="exportAudioBtn">⬇ Экспорт аудио (.m4a / .webm)</button>
           <div class="result" id="resA" hidden><span></span><button>скачать ещё раз</button></div>
         </div>
       </section>
@@ -389,12 +389,8 @@ let audioCtx=null, thumbToken=0, videoCancel=false;
 const blobs = { v:null, a:null };
 const dpr = () => window.devicePixelRatio || 1;
 
-/* ================= ЗАГРУЗЧИК mp4-muxer ================= */
-let MUX = null;
-function globalMux(){
-  const g = window.Mp4Muxer || window.mp4muxer || window.MP4Muxer;
-  return (g && g.Muxer && g.ArrayBufferTarget) ? g : null;
-}
+/* ================= ЗАГРУЗЧИКИ БИБЛИОТЕК ================= */
+let MUX=null, WMUX=null;
 function loadScript(url, timeout=7000){
   return new Promise((res, rej)=>{
     const s=document.createElement('script');
@@ -407,39 +403,54 @@ function loadScript(url, timeout=7000){
 }
 async function ensureMuxer(){
   if (MUX) return MUX;
-  MUX = globalMux(); if (MUX) return MUX;          // вдруг статический тег в <head> сработал
-  const tried = [];
-  // 1) IIFE-сборки: несколько CDN, версий и локальный файл
+  const g0 = window.Mp4Muxer || window.mp4muxer;
+  if (g0 && g0.Muxer && g0.ArrayBufferTarget) return (MUX=g0);
   const iife = [
     'https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js',
     'https://unpkg.com/mp4-muxer@5/build/mp4muxer.js',
     'https://cdn.jsdelivr.net/npm/mp4-muxer@4/build/mp4muxer.js',
-    'https://unpkg.com/mp4-muxer@4/build/mp4muxer.js',
     './mp4muxer.js'
   ];
   for (const u of iife){
-    tried.push(u);
-    try { await loadScript(u); MUX = globalMux(); if (MUX) return MUX; } catch(e){}
+    try { await loadScript(u); const g=window.Mp4Muxer||window.mp4muxer; if (g&&g.Muxer) return (MUX=g); } catch(e){}
   }
-  // 2) ES-модуль (самый надёжный путь — собирается самим CDN)
   const esm = [
     'https://cdn.jsdelivr.net/npm/mp4-muxer@5/+esm',
     'https://esm.sh/mp4-muxer@5',
     'https://unpkg.com/mp4-muxer@5/build/mp4muxer.es.js'
   ];
   for (const u of esm){
-    tried.push(u);
-    try { const m = await import(u); if (m && m.Muxer) return (MUX = m); } catch(e){}
+    try { const m = await import(u); if (m && m.Muxer) return (MUX=m); } catch(e){}
   }
-  throw new Error('Не удалось загрузить библиотеку мультиплексирования mp4-muxer ни с одного источника (' +
-    'пробовали: ' + tried.join(' | ') + '). Если доступ к CDN закрыт — скачайте файл ' +
-    'https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js и сохраните его как mp4muxer.js рядом с index.html.');
+  throw new Error('Не удалось загрузить mp4-muxer. Скачайте ' +
+    'https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js и положите рядом с index.html как mp4muxer.js.');
+}
+async function ensureWebmMuxer(){
+  if (WMUX) return WMUX;
+  const g0 = window.WebmMuxer || window.webmmuxer;
+  if (g0 && g0.Muxer && g0.ArrayBufferTarget) return (WMUX=g0);
+  const iife = [
+    'https://cdn.jsdelivr.net/npm/webm-muxer@4/build/webmmuxer.js',
+    'https://unpkg.com/webm-muxer@4/build/webmmuxer.js',
+    './webmmuxer.js'
+  ];
+  for (const u of iife){
+    try { await loadScript(u); const g=window.WebmMuxer||window.webmmuxer; if (g&&g.Muxer) return (WMUX=g); } catch(e){}
+  }
+  const esm = [
+    'https://cdn.jsdelivr.net/npm/webm-muxer@4/+esm',
+    'https://esm.sh/webm-muxer@4'
+  ];
+  for (const u of esm){
+    try { const m = await import(u); if (m && m.Muxer) return (WMUX=m); } catch(e){}
+  }
+  throw new Error('Не удалось загрузить webm-muxer (нужен для запасного кодека Opus). ' +
+    'Скачайте https://cdn.jsdelivr.net/npm/webm-muxer@4/build/webmmuxer.js и положите рядом как webmmuxer.js.');
 }
 ensureMuxer()
   .then(()=>{ el.muxChip.textContent='mp4-muxer ✓'; el.muxChip.classList.add('ok'); })
   .catch(()=>{ el.muxChip.textContent='⚠ mp4-muxer не найден'; el.muxChip.classList.add('bad');
     toast('Не удалось загрузить mp4-muxer автоматически. Подробности — в консоли (F12).','err');
-    console.warn('mp4-muxer: автозагрузка не удалась. Положите файл рядом с index.html: https://cdn.jsdelivr.net/npm/mp4-muxer@5/build/mp4muxer.js');
   });
 /* ======================================================== */
 
@@ -756,6 +767,19 @@ async function pickVideoCodec(w,h,fps,bitrate){
   throw new Error('кодировщик H.264 не поддерживается');
 }
 
+/* обрезка + ресемплинг через OfflineAudioContext */
+async function renderSlice(buffer, t0, t1, rate, chOut){
+  const d=buffer.duration;
+  const a=clamp(t0,0,d), b=clamp(t1,a+0.02,d);
+  const dur=b-a;
+  const ctx=new OfflineAudioContext(chOut, Math.max(1, Math.ceil(dur*rate)), rate);
+  const src=ctx.createBufferSource();
+  src.buffer=buffer;
+  src.connect(ctx.destination);
+  src.start(0, a, dur);
+  return await ctx.startRendering();
+}
+
 async function exportVideo(){
   if(state.busy){ toast('Уже идёт другая операция','err'); return; }
   let mux;
@@ -841,49 +865,93 @@ async function exportAudio(){
   if(!state.audioBuffer){ toast(state.audioBuffer===null? 'Аудиодорожка недоступна':'Звук ещё анализируется, подождите','err'); return; }
   if(state.out-state.in<0.05){ toast('Диапазон обрезки слишком короткий','err'); return; }
   state.busy='audio'; setBusy('a',true); step(3,'on');
-  el.statA.textContent='кодирование…';
+  el.statA.textContent='подбор кодека…'; el.pctA.textContent='';
   try{
-    const buf=state.audioBuffer, sr=buf.sampleRate;
+    const buf=state.audioBuffer;
     const chOut=Math.min(buf.numberOfChannels,2);
-    const s0=Math.max(0,Math.floor(state.in*sr)), s1=Math.min(buf.length,Math.ceil(state.out*sr));
+    /* перебор поддерживаемых конфигураций: сначала AAC, потом Opus */
+    const candidates=[
+      {codec:'mp4a.40.2', rate:buf.sampleRate, container:'mp4', ext:'m4a', bitrate:192000},
+      {codec:'mp4a.40.2', rate:48000,          container:'mp4', ext:'m4a', bitrate:192000},
+      {codec:'mp4a.40.2', rate:44100,          container:'mp4', ext:'m4a', bitrate:192000},
+      {codec:'opus',      rate:48000,          container:'webm',ext:'webm',bitrate:160000}
+    ];
+    let pick=null;
+    for(const c of candidates){
+      try{
+        const sup=await AudioEncoder.isConfigSupported({codec:c.codec, sampleRate:c.rate, numberOfChannels:chOut, bitrate:c.bitrate});
+        if(sup.supported){ pick=c; break; }
+      }catch(e){}
+    }
+    if(!pick) throw new Error('в этом браузере нет поддержки кодирования ни AAC, ни Opus');
+
+    /* если частота кодировщика отличается — обрезка + ресемплинг через OfflineAudioContext */
+    let work=buf, s0, s1;
+    if(pick.rate !== buf.sampleRate){
+      el.statA.textContent=`ресемплинг до ${(pick.rate/1000).toFixed(0)} кГц…`;
+      work=await renderSlice(buf, state.in, state.out, pick.rate, chOut);
+      s0=0; s1=work.length;
+    } else {
+      s0=Math.max(0,Math.floor(state.in*buf.sampleRate));
+      s1=Math.min(buf.length,Math.ceil(state.out*buf.sampleRate));
+    }
     const total=s1-s0;
-    if(total<sr*0.05) throw new Error('слишком короткий фрагмент');
-    let cfg={codec:'mp4a.40.2',sampleRate:sr,numberOfChannels:chOut,bitrate:192000};
-    const sup=await AudioEncoder.isConfigSupported(cfg);
-    if(!sup.supported) throw new Error('кодировщик AAC не поддерживается');
-    if(sup.config) cfg=Object.assign({},cfg,sup.config);
-    const muxer=new mux.Muxer({
-      target:new mux.ArrayBufferTarget(),
-      audio:{codec:'aac',numberOfChannels:chOut,sampleRate:sr},
-      fastStart:'in-memory'
-    });
+    if(total<work.sampleRate*0.05) throw new Error('слишком короткий фрагмент');
+    const sr=work.sampleRate;
+    const codecName=pick.codec==='opus'?'Opus':'AAC';
+    el.statA.textContent=`кодек: ${codecName} · запуск…`;
+
+    let muxer;
+    if(pick.container==='mp4'){
+      muxer=new mux.Muxer({
+        target:new mux.ArrayBufferTarget(),
+        audio:{codec:'aac',numberOfChannels:chOut,sampleRate:sr},
+        fastStart:'in-memory'
+      });
+    } else {
+      const w=await ensureWebmMuxer();
+      muxer=new w.Muxer({
+        target:new w.ArrayBufferTarget(),
+        audio:{codec:'opus',numberOfChannels:chOut},
+        firstTimestampBehavior:'offset'
+      });
+    }
     let encErr=null;
     const enc=new AudioEncoder({ output:(c,m)=>muxer.addAudioChunk(c,m), error:e=>encErr=e });
-    enc.configure(cfg);
-    const src=[]; for(let c=0;c<chOut;c++) src.push(buf.getChannelData(c).subarray(s0,s1));
+    enc.configure({codec:pick.codec, sampleRate:sr, numberOfChannels:chOut, bitrate:pick.bitrate});
+
+    const src=[]; for(let c=0;c<chOut;c++) src.push(work.getChannelData(c).subarray(s0,s1));
     const CHUNK=Math.min(sr,65536); let off=0, it=0;
     while(off<total){
       if(encErr) throw encErr;
       const n=Math.min(CHUNK,total-off);
       const merged=new Float32Array(n*chOut);
       for(let c=0;c<chOut;c++) merged.set(src[c].subarray(off,off+n), c*n);
-      const ad=new AudioData({format:'f32-planar',sampleRate:sr,numberOfFrames:n,
-        timestamp:Math.round(off/sr*1e6), data:merged.buffer});
+      const ad=new AudioData({
+        format:'f32-planar',
+        sampleRate:sr,
+        numberOfChannels:chOut,          // ← этого поля не хватало
+        numberOfFrames:n,
+        timestamp:Math.round(off/sr*1e6),
+        data:merged.buffer
+      });
       enc.encode(ad); ad.close();
       off+=n; it++;
       const p=off/total;
       setBar('a',p); el.pctA.textContent=Math.round(p*100)+'%';
-      el.statA.textContent=`кодирование · ${Math.round(off/sr)} из ${(total/sr).toFixed(1)} с`;
+      el.statA.textContent=`кодирование ${codecName} · ${Math.round(off/sr)} из ${(total/sr).toFixed(1)} с`;
       if(it%4===0) await new Promise(r=>setTimeout(r));
     }
     el.statA.textContent='финализация…'; setBar('a',.98);
     await enc.flush(); enc.close();
     muxer.finalize();
-    blobs.a=new Blob([muxer.target.buffer],{type:'audio/mp4'});
-    const name=state.base+'_audio.m4a';
+    const mime=pick.container==='mp4'?'audio/mp4':'audio/webm';
+    blobs.a=new Blob([muxer.target.buffer],{type:mime});
+    const name=`${state.base}_audio.${pick.ext}`;
     showResult('a', name, blobs.a.size);
-    setBar('a',1); el.statA.textContent='готово ✓'; el.pctA.textContent='';
-    toast('Аудиодорожка готова: '+name,'ok'); step(3,'done');
+    setBar('a',1); el.statA.textContent=`готово ✓ · ${codecName}`; el.pctA.textContent='';
+    toast(`Аудиодорожка готова: ${name} (${codecName})` + (pick.codec==='opus'?' — AAC в системе недоступен, использован Opus':''),'ok');
+    step(3,'done');
   }catch(e){
     toast('Ошибка экспорта аудио: '+(e&&e.message||e),'err');
     setBar('a',0); el.statA.textContent='готов к экспорту'; el.pctA.textContent='';
